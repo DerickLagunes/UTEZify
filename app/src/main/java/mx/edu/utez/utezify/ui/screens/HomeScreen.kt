@@ -3,6 +3,7 @@ package mx.edu.utez.utezify.ui.screens
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
@@ -10,18 +11,23 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.Nfc
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
@@ -73,6 +79,7 @@ fun HomeScreen(
     val context = LocalContext.current
 
     val songsState by songViewModel.songsState.collectAsState()
+    val operationState by songViewModel.operationState.collectAsState()
     val historyState by songViewModel.historyState.collectAsState()
     val currentUser by authViewModel.currentUser.collectAsState()
 
@@ -91,6 +98,23 @@ fun HomeScreen(
     // Inicializar Player Service
     LaunchedEffect(Unit) {
         playerViewModel.initPlayer(context)
+    }
+
+    // Notificaciones inmediatas de errores en operaciones Retrofit (Subir, Editar, Borrar)
+    LaunchedEffect(operationState) {
+        when (operationState) {
+            is UiState.Error -> {
+                val errorMsg = (operationState as UiState.Error).message
+                Toast.makeText(context, errorMsg, Toast.LENGTH_LONG).show()
+                songViewModel.clearOperationState()
+            }
+            is UiState.Success<*> -> {
+                val msg = (operationState as UiState.Success<*>).data.toString()
+                Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                songViewModel.clearOperationState()
+            }
+            else -> {}
+        }
     }
 
     // Permisos de notificación para Android 13+
@@ -210,7 +234,9 @@ fun HomeScreen(
 
                 is UiState.Empty -> {
                     Column(
-                        modifier = Modifier.align(Alignment.Center),
+                        modifier = Modifier
+                            .align(Alignment.Center)
+                            .padding(24.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Text(
@@ -231,15 +257,46 @@ fun HomeScreen(
                 }
 
                 is UiState.Error -> {
+                    val errorMessage = (songsState as UiState.Error).message
                     Column(
-                        modifier = Modifier.align(Alignment.Center),
+                        modifier = Modifier
+                            .align(Alignment.Center)
+                            .padding(24.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Text(
-                            text = (songsState as UiState.Error).message,
-                            color = MaterialTheme.colorScheme.error,
-                            textAlign = TextAlign.Center
-                        )
+                        Card(
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.2f)
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(16.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Error,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.error,
+                                    modifier = Modifier.size(32.dp)
+                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column {
+                                    Text(
+                                        text = "Error de Conexión Retrofit",
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.error,
+                                        fontSize = 14.sp
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = errorMessage,
+                                        color = Color.White,
+                                        fontSize = 13.sp
+                                    )
+                                }
+                            }
+                        }
                         Spacer(modifier = Modifier.height(16.dp))
                         Button(
                             onClick = { songViewModel.fetchSongs() },
@@ -247,7 +304,7 @@ fun HomeScreen(
                         ) {
                             Icon(Icons.Default.Refresh, contentDescription = null, tint = Color.Black)
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("Reintentar", color = Color.Black, fontWeight = FontWeight.Bold)
+                            Text("Reintentar Conexión", color = Color.Black, fontWeight = FontWeight.Bold)
                         }
                     }
                 }

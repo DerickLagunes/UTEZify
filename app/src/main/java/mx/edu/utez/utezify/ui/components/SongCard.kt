@@ -27,8 +27,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -46,16 +49,25 @@ fun SongCard(
     onDeleteClick: (Song) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val isDeleted = song.isDeleted
+
     Card(
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 12.dp, vertical = 6.dp)
-            .clickable { onPlayClick(song) },
+            .graphicsLayer {
+                // Opacidad reducida si la canción está borrada lógicamente
+                alpha = if (isDeleted) 0.55f else 1f
+            }
+            .clickable(enabled = !isDeleted) {
+                onPlayClick(song)
+            },
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
+            containerColor = if (isDeleted) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+            else MaterialTheme.colorScheme.surface
         ),
         shape = RoundedCornerShape(12.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = if (isDeleted) 1.dp else 4.dp)
     ) {
         Row(
             modifier = Modifier
@@ -80,15 +92,31 @@ fun SongCard(
             Column(
                 modifier = Modifier.weight(1f)
             ) {
-                Text(
-                    text = song.title,
-                    style = MaterialTheme.typography.titleMedium.copy(
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 16.sp
-                    ),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = song.title,
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp,
+                            textDecoration = if (isDeleted) TextDecoration.LineThrough else TextDecoration.None,
+                            color = if (isDeleted) SpotifyLightGrey else Color.White
+                        ),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+                    if (isDeleted) {
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "[BORRADA]",
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                color = MaterialTheme.colorScheme.error,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 10.sp
+                            )
+                        )
+                    }
+                }
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     text = "${song.artist} • ${song.duration}",
@@ -101,20 +129,28 @@ fun SongCard(
                 )
             }
 
-            // Acciones: Reproducir, Historial, Editar, Eliminar
+            // Acciones: Reproducir (Deshabilitado si borrada), Historial (SIEMPRE HABILITADO), Editar (Deshabilitado si borrada), Eliminar (Deshabilitado si borrada)
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.End
             ) {
-                IconButton(onClick = { onPlayClick(song) }) {
+                // Reproducir
+                IconButton(
+                    onClick = { onPlayClick(song) },
+                    enabled = !isDeleted
+                ) {
                     Icon(
                         imageVector = Icons.Default.PlayArrow,
                         contentDescription = "Reproducir",
-                        tint = SpotifyGreen
+                        tint = if (isDeleted) SpotifyLightGrey.copy(alpha = 0.3f) else SpotifyGreen
                     )
                 }
 
-                IconButton(onClick = { onHistoryClick(song) }) {
+                // HISTORIAL: SIEMPRE HABILITADO (Permite consultar auditoría incluso si está borrada)
+                IconButton(
+                    onClick = { onHistoryClick(song) },
+                    enabled = true
+                ) {
                     Icon(
                         imageVector = Icons.Default.History,
                         contentDescription = "Ver Historial de Auditoría",
@@ -122,19 +158,27 @@ fun SongCard(
                     )
                 }
 
-                IconButton(onClick = { onEditClick(song) }) {
+                // Editar
+                IconButton(
+                    onClick = { onEditClick(song) },
+                    enabled = !isDeleted
+                ) {
                     Icon(
                         imageVector = Icons.Default.Edit,
                         contentDescription = "Editar",
-                        tint = SpotifyLightGrey
+                        tint = if (isDeleted) SpotifyLightGrey.copy(alpha = 0.3f) else SpotifyLightGrey
                     )
                 }
 
-                IconButton(onClick = { onDeleteClick(song) }) {
+                // Eliminar
+                IconButton(
+                    onClick = { onDeleteClick(song) },
+                    enabled = !isDeleted
+                ) {
                     Icon(
                         imageVector = Icons.Default.Delete,
                         contentDescription = "Eliminar (Soft Delete)",
-                        tint = MaterialTheme.colorScheme.error
+                        tint = if (isDeleted) SpotifyLightGrey.copy(alpha = 0.3f) else MaterialTheme.colorScheme.error
                     )
                 }
             }

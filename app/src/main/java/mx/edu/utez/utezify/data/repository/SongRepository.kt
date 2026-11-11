@@ -3,6 +3,7 @@ package mx.edu.utez.utezify.data.repository
 import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
+import android.util.Log
 import android.webkit.MimeTypeMap
 import mx.edu.utez.utezify.data.models.Song
 import mx.edu.utez.utezify.data.models.SongHistoryResponse
@@ -19,20 +20,29 @@ import java.io.InputStream
 class SongRepository(
     private val apiService: ApiService
 ) {
+    companion object {
+        private const val TAG = "SongRepository"
+    }
 
     /**
-     * Obtiene la lista de canciones activas desde la API Flask.
+     * Obtiene la lista de canciones desde la API Flask (incluyendo canciones borradas lógicamente para auditoría).
      */
     suspend fun getSongs(): Result<List<Song>> {
         return try {
             val response = apiService.getSongs()
             if (response.isSuccessful && response.body() != null) {
-                Result.success(response.body()!!)
+                val songs = response.body()!!
+                Log.d(TAG, "getSongs: Éxito (${songs.size} canciones recibidas)")
+                Result.success(songs)
             } else {
-                Result.failure(Exception("Error al obtener canciones (${response.code()})"))
+                val errorMsg = "Error del servidor HTTP ${response.code()}: ${response.message()}"
+                Log.e(TAG, "getSongs fallo: $errorMsg")
+                Result.failure(Exception(errorMsg))
             }
         } catch (e: Exception) {
-            Result.failure(Exception("Error de red: ${e.localizedMessage}"))
+            val errorMsg = "Error de red al consultar canciones: ${e.localizedMessage ?: "Imposible conectar con el servidor"}"
+            Log.e(TAG, "getSongs excepción:", e)
+            Result.failure(Exception(errorMsg, e))
         }
     }
 
@@ -44,23 +54,30 @@ class SongRepository(
             val response = try {
                 apiService.getSongHistory(songId)
             } catch (e: Exception) {
+                Log.w(TAG, "getSongHistory API con wrapper falló, intentando respuesta directa...", e)
                 null
             }
 
             if (response != null && response.isSuccessful && response.body() != null) {
                 val apiResp = response.body()!!
                 val history = apiResp.data ?: SongHistoryResponse()
+                Log.d(TAG, "getSongHistory: Éxito para canción ID $songId")
                 Result.success(history)
             } else {
                 val directResp = apiService.getSongHistoryDirect(songId)
                 if (directResp.isSuccessful && directResp.body() != null) {
+                    Log.d(TAG, "getSongHistoryDirect: Éxito para canción ID $songId")
                     Result.success(directResp.body()!!)
                 } else {
-                    Result.failure(Exception("Error al obtener historial (${directResp.code()})"))
+                    val errorMsg = "Error al obtener historial (HTTP ${directResp.code()})"
+                    Log.e(TAG, "getSongHistory fallo: $errorMsg")
+                    Result.failure(Exception(errorMsg))
                 }
             }
         } catch (e: Exception) {
-            Result.failure(Exception("Error de red al consultar historial: ${e.localizedMessage}"))
+            val errorMsg = "Error de red al consultar historial: ${e.localizedMessage ?: "Servidor inaccesible"}"
+            Log.e(TAG, "getSongHistory excepción:", e)
+            Result.failure(Exception(errorMsg, e))
         }
     }
 
@@ -71,12 +88,17 @@ class SongRepository(
         return try {
             val response = apiService.getSongsByUser(matricula)
             if (response.isSuccessful && response.body() != null) {
+                Log.d(TAG, "getFirstSongByUser: Éxito para matrícula $matricula")
                 Result.success(response.body()!!)
             } else {
-                Result.failure(Exception("No se encontraron canciones para la matrícula: $matricula"))
+                val errorMsg = "No se encontraron canciones para la matrícula: $matricula (HTTP ${response.code()})"
+                Log.e(TAG, "getFirstSongByUser fallo: $errorMsg")
+                Result.failure(Exception(errorMsg))
             }
         } catch (e: Exception) {
-            Result.failure(Exception("Error al consultar NFC: ${e.localizedMessage}"))
+            val errorMsg = "Error de conexión al consultar NFC: ${e.localizedMessage ?: "Fallo de comunicación con servidor"}"
+            Log.e(TAG, "getFirstSongByUser excepción:", e)
+            Result.failure(Exception(errorMsg, e))
         }
     }
 
@@ -99,9 +121,9 @@ class SongRepository(
             val createdByPart = createdBy.toRequestBody("text/plain".toMediaTypeOrNull())
 
             val audioPart = uriToMultipart(context, audioUri, "audio", "audio/mpeg")
-                ?: return Result.failure(Exception("No se pudo procesar el archivo de audio"))
+                ?: return Result.failure(Exception("No se pudo procesar el archivo de audio local"))
             val imagePart = uriToMultipart(context, imageUri, "image", "image/*")
-                ?: return Result.failure(Exception("No se pudo procesar la imagen"))
+                ?: return Result.failure(Exception("No se pudo procesar la imagen de portada local"))
 
             val response = apiService.uploadSong(
                 titlePart,
@@ -113,12 +135,17 @@ class SongRepository(
             )
 
             if (response.isSuccessful) {
+                Log.d(TAG, "uploadSong: Éxito al registrar '$title'")
                 Result.success(true)
             } else {
-                Result.failure(Exception("Error al subir la canción (${response.code()})"))
+                val errorMsg = "Error al subir la canción (HTTP ${response.code()}): ${response.message()}"
+                Log.e(TAG, "uploadSong fallo: $errorMsg")
+                Result.failure(Exception(errorMsg))
             }
         } catch (e: Exception) {
-            Result.failure(Exception("Error al procesar subida: ${e.localizedMessage}"))
+            val errorMsg = "Error al procesar subida de la canción: ${e.localizedMessage ?: "Error desconocido en el envío"}"
+            Log.e(TAG, "uploadSong excepción:", e)
+            Result.failure(Exception(errorMsg, e))
         }
     }
 
@@ -155,12 +182,17 @@ class SongRepository(
             )
 
             if (response.isSuccessful) {
+                Log.d(TAG, "updateSong: Éxito al actualizar canción ID $songId")
                 Result.success(true)
             } else {
-                Result.failure(Exception("Error al actualizar (${response.code()})"))
+                val errorMsg = "Error al actualizar la canción (HTTP ${response.code()}): ${response.message()}"
+                Log.e(TAG, "updateSong fallo: $errorMsg")
+                Result.failure(Exception(errorMsg))
             }
         } catch (e: Exception) {
-            Result.failure(Exception("Error en actualización: ${e.localizedMessage}"))
+            val errorMsg = "Error en actualización de la canción: ${e.localizedMessage ?: "Servidor no responde"}"
+            Log.e(TAG, "updateSong excepción:", e)
+            Result.failure(Exception(errorMsg, e))
         }
     }
 
@@ -172,12 +204,17 @@ class SongRepository(
             val request = DeleteSongRequest(deletedBy = deletedBy)
             val response = apiService.softDeleteSong(songId, request)
             if (response.isSuccessful) {
+                Log.d(TAG, "softDeleteSong: Éxito al eliminar canción ID $songId por $deletedBy")
                 Result.success(true)
             } else {
-                Result.failure(Exception("Error al eliminar la canción (${response.code()})"))
+                val errorMsg = "Error al eliminar la canción (HTTP ${response.code()}): ${response.message()}"
+                Log.e(TAG, "softDeleteSong fallo: $errorMsg")
+                Result.failure(Exception(errorMsg))
             }
         } catch (e: Exception) {
-            Result.failure(Exception("Error de conexión al borrar: ${e.localizedMessage}"))
+            val errorMsg = "Error de conexión al eliminar la canción: ${e.localizedMessage ?: "Fallo de red"}"
+            Log.e(TAG, "softDeleteSong excepción:", e)
+            Result.failure(Exception(errorMsg, e))
         }
     }
 
@@ -194,10 +231,8 @@ class SongRepository(
         return try {
             val contentResolver = context.contentResolver
 
-            // 1. Obtener el nombre original desde ContentResolver
             var fileName = getFileNameFromUri(context, uri)
 
-            // 2. Determinar la extensión adecuada si falta o no es válida
             val mimeType = contentResolver.getType(uri) ?: defaultMimeType
             val extension = getExtensionFromMime(mimeType, paramName)
 
@@ -207,7 +242,6 @@ class SongRepository(
                 fileName = "$fileName.$extension"
             }
 
-            // 3. Crear el archivo temporal conservando la extensión del archivo
             val file = File(context.cacheDir, "upload_${System.currentTimeMillis()}_$fileName")
             val inputStream: InputStream? = contentResolver.openInputStream(uri)
             val outputStream = FileOutputStream(file)
@@ -221,7 +255,7 @@ class SongRepository(
             val requestFile = file.asRequestBody(mimeType.toMediaTypeOrNull())
             MultipartBody.Part.createFormData(paramName, fileName, requestFile)
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.e(TAG, "Error en uriToMultipart para el parámetro $paramName:", e)
             null
         }
     }
@@ -239,7 +273,7 @@ class SongRepository(
                     }
                 }
             } catch (e: Exception) {
-                e.printStackTrace()
+                Log.e(TAG, "Error consultando OpenableColumns:", e)
             }
         }
         if (name == null) {

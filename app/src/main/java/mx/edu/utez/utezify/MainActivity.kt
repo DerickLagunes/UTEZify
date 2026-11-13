@@ -11,6 +11,11 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.work.Constraints
+import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.NetworkType
+import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.WorkManager
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import mx.edu.utez.utezify.data.UserPreferences
@@ -23,6 +28,8 @@ import mx.edu.utez.utezify.ui.theme.UTEZifyTheme
 import mx.edu.utez.utezify.ui.viewmodels.AuthViewModel
 import mx.edu.utez.utezify.ui.viewmodels.PlayerViewModel
 import mx.edu.utez.utezify.ui.viewmodels.SongViewModel
+import mx.edu.utez.utezify.workers.NewSongCheckWorker
+import java.util.concurrent.TimeUnit
 
 class MainActivity : ComponentActivity() {
 
@@ -43,6 +50,14 @@ class MainActivity : ComponentActivity() {
         val apiService = RetrofitClient.apiService
         val authRepository = AuthRepository(apiService, userPreferences)
         val songRepository = SongRepository(apiService)
+
+        // Registrar la última vez que la app fue abierta en DataStore
+        lifecycleScope.launch {
+            userPreferences.updateLastOpenTimestamp(System.currentTimeMillis())
+        }
+
+        // Programar tarea en segundo plano periódica con WorkManager
+        scheduleNewSongCheckWorker()
 
         setContent {
             UTEZifyTheme {
@@ -71,6 +86,24 @@ class MainActivity : ComponentActivity() {
 
         // Manejo de Intent inicial si la app se abrió mediante NFC
         handleNfcIntent(intent)
+    }
+
+    private fun scheduleNewSongCheckWorker() {
+        val constraints = Constraints.Builder()
+            .setRequiredNetworkType(NetworkType.CONNECTED)
+            .build()
+
+        val periodicWorkRequest = PeriodicWorkRequestBuilder<NewSongCheckWorker>(
+            15, TimeUnit.MINUTES
+        )
+            .setConstraints(constraints)
+            .build()
+
+        WorkManager.getInstance(applicationContext).enqueueUniquePeriodicWork(
+            NewSongCheckWorker.WORK_NAME,
+            ExistingPeriodicWorkPolicy.KEEP,
+            periodicWorkRequest
+        )
     }
 
     override fun onResume() {

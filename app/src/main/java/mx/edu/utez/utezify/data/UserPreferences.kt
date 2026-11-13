@@ -6,9 +6,11 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import mx.edu.utez.utezify.data.models.User
 
@@ -21,6 +23,7 @@ class UserPreferences(private val context: Context) {
         private val USER_MATRICULA = stringPreferencesKey("user_matricula")
         private val USER_FULL_NAME = stringPreferencesKey("user_full_name")
         private val USER_ID = intPreferencesKey("user_id")
+        private val LAST_OPEN_TIMESTAMP = longPreferencesKey("last_open_timestamp")
     }
 
     val isLoggedIn: Flow<Boolean> = context.dataStore.data.map { preferences ->
@@ -37,6 +40,20 @@ class UserPreferences(private val context: Context) {
                 fullName = preferences[USER_FULL_NAME] ?: "",
                 matricula = m
             )
+        }
+    }
+
+    val lastOpenTimestamp: Flow<Long> = context.dataStore.data.map { preferences ->
+        preferences[LAST_OPEN_TIMESTAMP] ?: 0L
+    }
+
+    suspend fun getLastOpenTimestampSync(): Long {
+        return context.dataStore.data.first()[LAST_OPEN_TIMESTAMP] ?: 0L
+    }
+
+    suspend fun updateLastOpenTimestamp(timestamp: Long = System.currentTimeMillis()) {
+        context.dataStore.edit { preferences ->
+            preferences[LAST_OPEN_TIMESTAMP] = timestamp
         }
     }
 
